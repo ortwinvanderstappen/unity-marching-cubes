@@ -13,7 +13,7 @@ struct Triangle
 uint width;
 uint height;
 uint depth;
-float surfaceLevel;
+float isoLevel;
 
 // Buffers
 AppendStructuredBuffer<Triangle> triangles;
@@ -26,10 +26,10 @@ uint indexFromCoord(uint x, uint y, uint z)
 	return x + (y * width) + (z * width * height);
 }
 
-float3 CalculateEdgePoint(float3 p1, float3 p2)
+float3 CalculateEdgePoint(float4 p1, float4 p2)
 {
-	//return p1 + (surfaceLevel - p1.w) * (p2 - p1) / (p2.w - p1.w);
-	return p1 + (p2 - p1) * 0.5f;
+	return p1.xyz + (isoLevel - p1.w) * (p2.xyz - p1.xyz) / (p2.w - p1.w);
+	//return p1 + (p2 - p1) * 0.5f;
 }
 
 [numthreads(8, 8, 8)]
@@ -56,7 +56,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 	int byteCode = 0;
 	for (int i = 0; i < 8; ++i)
 	{
-		if (noisepoints[i].w < surfaceLevel)
+		if (noisepoints[i].w < isoLevel)
 		{
 			byteCode |= 1 << i;
 		}
@@ -84,9 +84,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 		int c1 = cornerIndexBFromEdge[edge3];
 
 		// Find the midpoints for the vertices
-		t.v1 = CalculateEdgePoint(noisepoints[a0].xyz, noisepoints[a1].xyz);
-		t.v2 = CalculateEdgePoint(noisepoints[b0].xyz, noisepoints[b1].xyz);
-		t.v3 = CalculateEdgePoint(noisepoints[c0].xyz, noisepoints[c1].xyz);
+		t.v1 = CalculateEdgePoint(noisepoints[a0], noisepoints[a1]);
+		t.v2 = CalculateEdgePoint(noisepoints[b0], noisepoints[b1]);
+		t.v3 = CalculateEdgePoint(noisepoints[c0], noisepoints[c1]);
 
 		// Add the triangle to the buffer
 		triangles.Append(t);

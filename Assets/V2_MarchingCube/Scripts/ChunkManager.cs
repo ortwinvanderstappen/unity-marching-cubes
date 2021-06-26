@@ -15,11 +15,13 @@ namespace V2
 
         // Dynamic chunk properties
         [Header("Dynamic properties")]
+        [SerializeField] private float _isoLevel;
+        [SerializeField] private float _surfaceLevel = 0.0f;
+        [SerializeField] private float _flattenScale = 1.0f;
+
+        [Header("Debugging")]
         [SerializeField] private float _generationDelay = 0.5f;
-        [SerializeField] private float _surfaceLevel;
         [SerializeField] private bool _drawGizmos;
-        [SerializeField] private float _noiseScale;
-        [SerializeField] private float _pointScale;
 
         // Buffers
         [Header("Data properties")]
@@ -33,9 +35,17 @@ namespace V2
 
         public void StartChunkGeneration()
         {
-            StartCoroutine(GenerateChunks());
+            if (_generationDelay == 0)
+            {
+                GenerateChunks();
+            }
+            else
+            {
+                StopCoroutine(GenerateChunksInCoroutine());
+                StartCoroutine(GenerateChunksInCoroutine());
+            }
         }
-        private IEnumerator GenerateChunks()
+        private IEnumerator GenerateChunksInCoroutine()
         {
             for (int i = 0; i < _chunkCount; i++)
             {
@@ -44,17 +54,37 @@ namespace V2
                     for (int k = 0; k < _chunkCount; k++)
                     {
                         Chunk chunk = _chunkArray[i, j, k];
-                        Debug.Log($"Generating chunk [{i},{j},{k}]");
-            
 
                         // Setup new chunk properties
-                                    chunk.SurfaceLevel = _surfaceLevel;
+                        chunk.IsoLevel = _isoLevel;
                         chunk.DrawGizmos = _drawGizmos;
-                        chunk.NoiseScale = _noiseScale;
-                        chunk.PointScale = _pointScale;
+                        chunk.SurfaceLevel = _surfaceLevel;
+                        chunk.FlattenScale = _flattenScale;
 
                         chunk.GenerateChunk();
                         yield return new WaitForSeconds(_generationDelay);
+                    }
+                }
+            }
+        }
+
+        private void GenerateChunks()
+        {
+            for (int i = 0; i < _chunkCount; i++)
+            {
+                for (int j = 0; j < _chunkCount; j++)
+                {
+                    for (int k = 0; k < _chunkCount; k++)
+                    {
+                        Chunk chunk = _chunkArray[i, j, k];
+
+                        // Setup new chunk properties
+                        chunk.IsoLevel = _isoLevel;
+                        chunk.DrawGizmos = _drawGizmos;
+                        chunk.SurfaceLevel = _surfaceLevel;
+                        chunk.FlattenScale = _flattenScale;
+
+                        chunk.GenerateChunk();
                     }
                 }
             }
@@ -76,9 +106,7 @@ namespace V2
 
         private void CreateChunk(int x, int y, int z)
         {
-            // 8 * 1 * 0.5 = 4
             Vector3 chunkPosition = new Vector3(_chunkSize.x * x, _chunkSize.y * y, _chunkSize.z * z);
-            Debug.Log("ChunkManager, creating chunk at position: " + chunkPosition);
 
             // Create chunk object
             GameObject chunkObject = Instantiate(_chunkPrefab, chunkPosition, Quaternion.identity);
@@ -95,7 +123,7 @@ namespace V2
             chunk.PointDensity = _pointDensity;
             chunk.DrawGizmos = _drawGizmos;
 
-            _chunkArray[x,y,z] = chunk;
+            _chunkArray[x, y, z] = chunk;
         }
     }
 }

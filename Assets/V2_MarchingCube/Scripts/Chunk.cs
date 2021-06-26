@@ -17,9 +17,10 @@ namespace V2
         [SerializeField] private Material _meshMaterial;
 
         // Dynamic properties
-        public float NoiseScale { get; set; }
-        public float PointScale { get; set; }
         public float SurfaceLevel { get; set; }
+        public float FlattenScale { get; set; }
+        public float IsoLevel { get; set; }
+        public Vector3 Offset { get; set; }
 
         // Rendering components
         private MeshFilter _meshFilter;
@@ -38,14 +39,17 @@ namespace V2
         private V2.Triangle[] _triangleBuffer;
         // GPU Buffers
         ComputeBuffer _noiseGeneratorNoiseBuffer;
-        //ComputeBuffer _triangleComputeBuffer;
+        ComputeBuffer _triangleComputeBuffer;
         ComputeBuffer _marchingCubeNoiseBuffer;
 
-        [SerializeField] private List<float> _noiseValues;
+        // Debug buffers
+        //ComputeBuffer _noisePositionBuffer;
+
+        //[SerializeField] private List<float> _noiseValues;
+        [SerializeField] private Vector3[] _noiseValues;
 
         void Start()
         {
-            _noiseValues = new List<float>();
 
             _meshFilter = GetComponent<MeshFilter>();
             _meshRenderer = GetComponent<MeshRenderer>();
@@ -57,15 +61,22 @@ namespace V2
 
             GenerateChunkPoints();
 
+            _noiseValues = new Vector3[_noisePoints.Length];
             _noiseGeneratorNoiseBuffer = new ComputeBuffer(_noisePoints.Length, sizeof(float) * 4);
             _marchingCubeNoiseBuffer = new ComputeBuffer(_noisePoints.Length, sizeof(float) * 4);
+            _triangleComputeBuffer = new ComputeBuffer(_noisePoints.Length * 5, sizeof(float) * 3 * 3, ComputeBufferType.Append);
+
+            Offset = transform.position;
+
+            // Debug
+            //_noisePositionBuffer = new ComputeBuffer(_noisePoints.Length, sizeof(float) * 4);
         }
 
         private void OnDestroy()
         {
             _noiseGeneratorNoiseBuffer.Release();
             _marchingCubeNoiseBuffer.Release();
-            //_triangleComputeBuffer.Release();
+            _triangleComputeBuffer.Release();
         }
 
         public void GenerateChunk()
@@ -98,14 +109,14 @@ namespace V2
         }
         private void CreateNoisePoint(int x, int y, int z, Vector3 distanceBetweenPoints)
         {
-            // Calculate point position
+            // Calculate start position
             Vector3 chunkDimensions = new Vector3(_chunkSize.x - 1, _chunkSize.y - 1, _chunkSize.z - 1);
-            Vector3 startPosition = -(chunkDimensions) / 2.0f;
+            Vector3 pointPosition = - (chunkDimensions)* 0.5f;
 
-            Vector3 pointPosition = startPosition;
+            // Increment position per point
             pointPosition += new Vector3(x * distanceBetweenPoints.x, y * distanceBetweenPoints.y, z * distanceBetweenPoints.z);
 
-            // Calculate noise
+            // Set a default noise value (for debugging)
             float noise = -999.0f;
 
             // Create noise point
@@ -120,27 +131,25 @@ namespace V2
 
             // Dynamic properties
             _noiseGenerateShader.SetVector("offset", transform.position);
-            _noiseGenerateShader.SetFloat("noiseScale", NoiseScale);
-            _noiseGenerateShader.SetFloat("pointScale", PointScale);
+            _noiseGenerateShader.SetFloat("surfaceLevel", SurfaceLevel);
+            _noiseGenerateShader.SetFloat("flattenScale", FlattenScale);
+            _noiseGenerateShader.SetVector("offset", Offset);
 
             // Buffer data
             _noiseGeneratorNoiseBuffer.SetData(_noisePoints);
             _noiseGenerateShader.SetBuffer(0, "noiseBuffer", _noiseGeneratorNoiseBuffer);
+            //_noiseGenerateShader.SetBuffer(0, "noisePositionBuffer", _noisePositionBuffer);
 
             // Execute the shader
             const int numThreads = 8;
             int xThreads = Mathf.CeilToInt((float)_pointDensity / numThreads);
             int yThreads = Mathf.CeilToInt((float)_pointDensity / numThreads);
             int zThreads = Mathf.CeilToInt((float)_pointDensity / numThreads);
-            Debug.Log($"Dispatching noise compute shader with threads: {xThreads}, {yThreads}, {zThreads}");
             _noiseGenerateShader.Dispatch(0, xThreads, yThreads, zThreads);
 
             // Handle buffer callbacks to make sure they get completed
             System.Action<AsyncGPUReadbackRequest> noiseBufferCallback = noiseBufferRequest => OnComputeNoiseBufferComplete(noiseBufferRequest);
             AsyncGPUReadback.Request(_noiseGeneratorNoiseBuffer, noiseBufferCallback);
-
-            // Store the buffer data
-            _noiseGeneratorNoiseBuffer.GetData(_noisePoints);
         }
         private void OnComputeNoiseBufferComplete(AsyncGPUReadbackRequest noiseBufferRequest)
         {
@@ -150,7 +159,7 @@ namespace V2
             // Debug
             for (int i = 0; i < _noisePoints.Length; i++)
             {
-                _noiseValues.Add(_noisePoints[i].noiseValue);
+                _noiseValues[i] = _noisePoints[i].position;
             }
 
             GenerateMesh();
@@ -159,7 +168,7 @@ namespace V2
         private void GenerateMesh()
         {
             // Setup properties
-            _marchingCubesShader.SetFloat("surfaceLevel", SurfaceLevel);
+            _marchingCubesShader.SetFloat("isoLevel", IsoLevel);
             _marchingCubesShader.SetInt("width", PointDensity);
             _marchingCubesShader.SetInt("height", PointDensity);
             _marchingCubesShader.SetInt("depth", PointDensity);
@@ -167,30 +176,28 @@ namespace V2
             // Point buffer
             _marchingCubeNoiseBuffer.SetData(_noisePoints);
             _marchingCubesShader.SetBuffer(0, "points", _marchingCubeNoiseBuffer);
-
-            ComputeBuffer triangleComputeBuffer = new ComputeBuffer(_noisePoints.Length * 5, sizeof(float) * 3 * 3, ComputeBufferType.Append);
-            _marchingCubesShader.SetBuffer(0, "triangles", triangleComputeBuffer);
-            triangleComputeBuffer.SetCounterValue(0);
+            // Vertex buffer
+            _marchingCubesShader.SetBuffer(0, "triangles", _triangleComputeBuffer);
+            _triangleComputeBuffer.SetCounterValue(0);
 
             // Execute the shader
             const int numThreads = 8;
             int xThreads = Mathf.CeilToInt((float)_pointDensity / numThreads);
             int yThreads = Mathf.CeilToInt((float)_pointDensity / numThreads);
             int zThreads = Mathf.CeilToInt((float)_pointDensity / numThreads);
-            Debug.Log($"Dispatching marching compute shader with threads: {xThreads}, {yThreads}, {zThreads}");
             _marchingCubesShader.Dispatch(0, xThreads, yThreads, zThreads);
 
             // Handle buffer callbacks to make sure they get completed
-            System.Action<AsyncGPUReadbackRequest> triangleBufferCallback = triangleBufferRequest => OnTriangleBufferComplete(triangleBufferRequest, triangleComputeBuffer);
-            AsyncGPUReadback.Request(triangleComputeBuffer, triangleBufferCallback);
+            System.Action<AsyncGPUReadbackRequest> triangleBufferCallback = triangleBufferRequest => OnTriangleBufferComplete(triangleBufferRequest);
+            AsyncGPUReadback.Request(_triangleComputeBuffer, triangleBufferCallback);
         }
-        private void OnTriangleBufferComplete(AsyncGPUReadbackRequest triangleBufferRequest, ComputeBuffer triangleComputeBuffer)
+        private void OnTriangleBufferComplete(AsyncGPUReadbackRequest triangleBufferRequest)
         {
             // Determine triangle count via a count buffer
-            int triangleCount = V2.Helper.GetAppendBufferSize(triangleComputeBuffer);
+            int triangleCount = V2.Helper.GetAppendBufferSize(_triangleComputeBuffer);
 
             // Make sure we have a correct trianglecount
-            if (triangleCount < 0 || triangleCount > triangleComputeBuffer.count)
+            if (triangleCount < 0 || triangleCount > _triangleComputeBuffer.count)
             {
                 Debug.LogError("Wrong triangles... count: " + triangleCount);
                 return;
@@ -206,8 +213,6 @@ namespace V2
 
             // Read data from buffer and put it in the triangle buffer (sub array to only read the used data)
             _triangleBuffer = triangleBufferRequest.GetData<V2.Triangle>().GetSubArray(0, triangleCount).ToArray();
-
-            triangleComputeBuffer.Release();
 
             // Create the mesh
             CreateMesh();
