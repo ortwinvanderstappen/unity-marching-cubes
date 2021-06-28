@@ -68,6 +68,8 @@ namespace V2
 
             Offset = transform.position;
 
+            GenerateChunk();
+
             // Debug
             //_noisePositionBuffer = new ComputeBuffer(_noisePoints.Length, sizeof(float) * 4);
         }

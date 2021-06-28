@@ -11,97 +11,116 @@ namespace V2
         [SerializeField] private GameObject _chunkPrefab;
         [SerializeField] private Vector3Int _chunkSize;
         [SerializeField] private int _pointDensity;
-        [SerializeField] private int _chunkCount;
 
         // Dynamic chunk properties
         [Header("Dynamic properties")]
+        [SerializeField] private float _chunkDistance = 50.0f;
+        [SerializeField] private float _chunkDespawnDistanceOffset = 10.0f;
+
         [SerializeField] private float _isoLevel;
         [SerializeField] private float _surfaceLevel = 0.0f;
         [SerializeField] private float _flattenScale = 1.0f;
 
         [Header("Debugging")]
-        [SerializeField] private float _generationDelay = 0.5f;
         [SerializeField] private bool _drawGizmos;
 
         // Buffers
         [Header("Data properties")]
-        [SerializeField] private Chunk[,,] _chunkArray;
+        [SerializeField] private List<Chunk> _chunks;
+
+        [SerializeField] Transform _playerTransform;
 
         void Start()
         {
-            _chunkArray = new Chunk[_chunkCount, _chunkCount, _chunkCount];
-            SpawnChunks();
+
         }
 
-        public void StartChunkGeneration()
+        private void Update()
         {
-            if (_generationDelay == 0)
+            List<Chunk> chunksToRemove = new List<Chunk>();
+
+            // Go through all the current chunks
+            int chunkIndex = 0;
+            foreach (Chunk c in _chunks)
             {
-                GenerateChunks();
-            }
-            else
-            {
-                StopCoroutine(GenerateChunksInCoroutine());
-                StartCoroutine(GenerateChunksInCoroutine());
-            }
-        }
-        private IEnumerator GenerateChunksInCoroutine()
-        {
-            for (int i = 0; i < _chunkCount; i++)
-            {
-                for (int j = 0; j < _chunkCount; j++)
+                // Determine if chunk is out of player range and unload it
+                float distanceToPlayer = Vector3.Distance(c.transform.position, _playerTransform.position);
+                if (distanceToPlayer >= _chunkDistance + _chunkDespawnDistanceOffset)
                 {
-                    for (int k = 0; k < _chunkCount; k++)
+                    chunksToRemove.Add(c);
+                    Destroy(c.gameObject);
+                }
+
+                ++chunkIndex;
+            }
+
+            // Remove dead chunks
+            foreach (Chunk chunkToRemove in chunksToRemove)
+            {
+                _chunks.Remove(chunkToRemove);
+            }
+
+            // Load required chunks around current player position taking into account chunk distance
+            Vector3 startPosition = _playerTransform.position;
+            startPosition -= new Vector3(_chunkDistance * 0.5f, _chunkDistance * 0.5f, _chunkDistance * 0.5f);
+            Vector3 currentPosition = startPosition;
+
+            while (currentPosition.x <= _playerTransform.position.x + _chunkDistance)
+            {
+                while (currentPosition.y <= _playerTransform.position.y + _chunkDistance)
+                {
+                    while (currentPosition.z <= _playerTransform.position.z + _chunkDistance)
                     {
-                        Chunk chunk = _chunkArray[i, j, k];
+                        Chunk chunk = PositionToChunk(currentPosition);
+                        if (chunk == null)
+                        {
+                            CreateChunkAtPosition(currentPosition);
+                        }
 
-                        // Setup new chunk properties
-                        chunk.IsoLevel = _isoLevel;
-                        chunk.DrawGizmos = _drawGizmos;
-                        chunk.SurfaceLevel = _surfaceLevel;
-                        chunk.FlattenScale = _flattenScale;
-
-                        chunk.GenerateChunk();
-                        yield return new WaitForSeconds(_generationDelay);
+                        // Increment depth
+                        currentPosition.z += _chunkSize.z;
                     }
+
+                    // Increment height
+                    currentPosition.y += _chunkSize.y;
+                    // Reset depth
+                    currentPosition.z = startPosition.z;
+                }
+
+                // Increment width
+                currentPosition.x += _chunkSize.x;
+                // Reset height
+                currentPosition.y = startPosition.y;
+            }
+        }
+
+        Chunk PositionToChunk(Vector3 position)
+        {
+            foreach (Chunk c in _chunks)
+            {
+                Bounds bounds = new Bounds();
+                bounds.center = c.gameObject.transform.position;
+                bounds.size = _chunkSize;
+                bounds.extents = bounds.size * 0.5f;
+
+                if (bounds.Contains(position))
+                {
+                    return c;
                 }
             }
+
+            return null;
         }
 
-        private void GenerateChunks()
+        void CreateChunkAtPosition(Vector3 position)
         {
-            for (int i = 0; i < _chunkCount; i++)
-            {
-                for (int j = 0; j < _chunkCount; j++)
-                {
-                    for (int k = 0; k < _chunkCount; k++)
-                    {
-                        Chunk chunk = _chunkArray[i, j, k];
+            Vector3Int chunkIndex3D = new Vector3Int(
+                Mathf.RoundToInt(position.x / _chunkSize.x),
+                Mathf.RoundToInt(position.y / _chunkSize.y),
+                Mathf.RoundToInt(position.z / _chunkSize.z)
+                );
 
-                        // Setup new chunk properties
-                        chunk.IsoLevel = _isoLevel;
-                        chunk.DrawGizmos = _drawGizmos;
-                        chunk.SurfaceLevel = _surfaceLevel;
-                        chunk.FlattenScale = _flattenScale;
-
-                        chunk.GenerateChunk();
-                    }
-                }
-            }
-        }
-
-        private void SpawnChunks()
-        {
-            for (int i = 0; i < _chunkCount; i++)
-            {
-                for (int j = 0; j < _chunkCount; j++)
-                {
-                    for (int k = 0; k < _chunkCount; k++)
-                    {
-                        CreateChunk(i, j, k);
-                    }
-                }
-            }
+            CreateChunk(chunkIndex3D.x, chunkIndex3D.y, chunkIndex3D.z);
         }
 
         private void CreateChunk(int x, int y, int z)
@@ -119,11 +138,18 @@ namespace V2
 
             // Set chunk properties
             Chunk chunk = chunkObject.GetComponent<Chunk>();
+
+            // STATIC
             chunk.ChunkSize = alteredChunkSize;
             chunk.PointDensity = _pointDensity;
-            chunk.DrawGizmos = _drawGizmos;
 
-            _chunkArray[x, y, z] = chunk;
+            // DYNAMIC
+            chunk.IsoLevel = _isoLevel;
+            chunk.DrawGizmos = _drawGizmos;
+            chunk.SurfaceLevel = _surfaceLevel;
+            chunk.FlattenScale = _flattenScale;
+
+            _chunks.Add(chunk);
         }
     }
 }
