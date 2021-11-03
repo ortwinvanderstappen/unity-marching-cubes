@@ -35,7 +35,7 @@ float3 CalculateEdgePoint(float4 p1, float4 p2)
 [numthreads(8, 8, 8)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
-	// The shader may run more than intented due to rounding
+	// The shader may run more than intended due to rounding
 		// If the size of the chunk is 8x8x8, it should only march in a 7x7x7.
 		// This is because on every march, it uses 8 points around it to create a cube. It uses the next row/col so the last one should be omitted;
 	if (id.x >= width - 1 || id.y >= height - 1 || id.z >= depth - 1)

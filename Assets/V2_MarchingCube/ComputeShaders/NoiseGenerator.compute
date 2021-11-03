@@ -4,8 +4,8 @@
 
 struct testStruct
 {
-	uint3 indices;
-	uint index;
+    uint3 indices;
+    uint index;
 };
 
 uint width;
@@ -20,26 +20,40 @@ RWStructuredBuffer<float4> noiseBuffer;
 
 uint indexFromCoord(uint x, uint y, uint z)
 {
-	return x + (y * width) + (z * width * height);
+    return x + (y * width) + (z * width * height);
 }
-
 
 [numthreads(8, 8, 8)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
-	float noise;
-	
 	// Get the correct index
-	const uint index = indexFromCoord(id.x, id.y, id.z);
+    const uint index = indexFromCoord(id.x, id.y, id.z);
 	
 	// Get the noise point corresponding to this index
-	const float3 p = noiseBuffer[index].xyz + offset;
+    const float3 p = noiseBuffer[index].xyz + offset;
 	
-	//noise = snoise(noisePoint.xyz);
-	noise = -p.y * flattenScale + snoise(float3(p.x, p.y, p.z)) + surfaceLevel * flattenScale;
+	// Flatten the terrain
+    float noise = (-p.y + surfaceLevel) * (flattenScale + 0.5f * snoise(float2(p.x / 100, p.z / 100)));
+
+	// General height map
+    const float height = snoise(float3(p.x / 100, p.y / 100, p.z / 100)) * 10;
+    noise += height;
+	
+    if (height > 0)
+    {
+    	// Height detail
+        const float mountainPeakDetail = snoise(float2(p.x / 10, p.z / 10)) * height;
+        if (mountainPeakDetail > 0)
+            noise += mountainPeakDetail;
+    }
+    else
+    {
+        const float valleyDetail = snoise(float2(p.x / 10, p.z / 10)) * 5 / (abs(height) + 1);
+        noise += valleyDetail;
+    }
 	
 	// Set the noise
-	noiseBuffer[index][3] = noise;
+    noiseBuffer[index][3] = noise;
 }
 
 

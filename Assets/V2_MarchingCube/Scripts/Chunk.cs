@@ -7,6 +7,7 @@ namespace V2
 {
     [RequireComponent(typeof(MeshFilter))]
     [RequireComponent(typeof(MeshRenderer))]
+    [RequireComponent(typeof(MeshCollider))]
     public class Chunk : MonoBehaviour
     {
         // Chunk properties
@@ -25,6 +26,7 @@ namespace V2
         // Rendering components
         private MeshFilter _meshFilter;
         private MeshRenderer _meshRenderer;
+        private MeshCollider _meshCollider;
         private Mesh _mesh;
 
         // Noise points
@@ -50,14 +52,16 @@ namespace V2
 
         void Start()
         {
+            gameObject.layer = 6;
 
             _meshFilter = GetComponent<MeshFilter>();
             _meshRenderer = GetComponent<MeshRenderer>();
+            _meshCollider = GetComponent<MeshCollider>();
 
             _mesh = new Mesh();
             _meshFilter.sharedMesh = _mesh;
-
             _meshRenderer.sharedMaterial = _meshMaterial;
+            _meshCollider.sharedMesh = _mesh;
 
             GenerateChunkPoints();
 
@@ -69,9 +73,6 @@ namespace V2
             Offset = transform.position;
 
             GenerateChunk();
-
-            // Debug
-            //_noisePositionBuffer = new ComputeBuffer(_noisePoints.Length, sizeof(float) * 4);
         }
 
         private void OnDestroy()
@@ -109,6 +110,7 @@ namespace V2
                 }
             }
         }
+
         private void CreateNoisePoint(int x, int y, int z, Vector3 distanceBetweenPoints)
         {
             // Calculate start position
@@ -125,6 +127,7 @@ namespace V2
             int index = x + (y * _pointDensity) + (z * _pointDensity * _pointDensity);
             _noisePoints[index] = new V2.NoisePoint(pointPosition, noise);
         }
+
         private void ComputeNoise()
         {
             // Static properties
@@ -153,6 +156,7 @@ namespace V2
             System.Action<AsyncGPUReadbackRequest> noiseBufferCallback = noiseBufferRequest => OnComputeNoiseBufferComplete(noiseBufferRequest);
             AsyncGPUReadback.Request(_noiseGeneratorNoiseBuffer, noiseBufferCallback);
         }
+
         private void OnComputeNoiseBufferComplete(AsyncGPUReadbackRequest noiseBufferRequest)
         {
             // Read data from buffer
@@ -193,6 +197,7 @@ namespace V2
             System.Action<AsyncGPUReadbackRequest> triangleBufferCallback = triangleBufferRequest => OnTriangleBufferComplete(triangleBufferRequest);
             AsyncGPUReadback.Request(_triangleComputeBuffer, triangleBufferCallback);
         }
+
         private void OnTriangleBufferComplete(AsyncGPUReadbackRequest triangleBufferRequest)
         {
             // Determine triangle count via a count buffer
@@ -252,6 +257,8 @@ namespace V2
             _mesh.triangles = indices;
 
             _mesh.RecalculateNormals();
+
+            _meshCollider.sharedMesh = _mesh;
         }
 
         private void OnDrawGizmos()
@@ -262,8 +269,6 @@ namespace V2
 
         private void DrawNoisePointGizmos()
         {
-            const float size = 0.05f;
-
             foreach (V2.NoisePoint noisePoint in _noisePoints)
             {
                 // Obtain the noise value
@@ -276,7 +281,8 @@ namespace V2
                 else
                     Gizmos.color = new Color(noiseValueColor, noiseValueColor, noiseValueColor);
 
-                Gizmos.DrawCube(transform.position + noisePoint.position, new Vector3(size, size, size));
+                float cubeSize = Mathf.Abs(noiseValueColor) / 10;
+                Gizmos.DrawCube(transform.position + noisePoint.position, new Vector3(cubeSize, cubeSize, cubeSize));
             }
         }
     }
