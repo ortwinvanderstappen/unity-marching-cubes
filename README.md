@@ -14,6 +14,10 @@ Terrain generation. Noise generation was altered via a compute shader. The terra
 Multiple chunks can be spawned depending on the player position, chunks are managed by a ChunkManager which allows for infinite terrain. 
 ![Terrain Scene](https://github.com/ortwinvanderstappen/unity-marching-cubes/blob/main/Images/Scene02.PNG?raw=true)
 
+## Shaders
+The Unity Shader graph was used to alter terrain based on height and normals.
+![alt text](https://raw.githubusercontent.com/ortwinvanderstappen/unity-marching-cubes/main/Images/MarchingCubes.png)
+
 ## What next?
 
 ### Noise values
@@ -21,9 +25,6 @@ The world of noise generation goes way beyond what I initially thought. I dipped
 
 ### Terrain altering
 It's possible to alter the vertex points noise values, a raycast "gun" that alters the noise values of certain points would allow for dynamic terrain alterations. Creating caves or hills by shooting a certain point.
-
-### Visual shaders
-The terrain currently has a very basic material, shading polygons depending on normal, height and position would be a great addition.
 
 ## Conclusions
 I learned a lot and obtained the knowledge to dive deeper into the subject, this project has a good chance on being expanded upon in the future.
