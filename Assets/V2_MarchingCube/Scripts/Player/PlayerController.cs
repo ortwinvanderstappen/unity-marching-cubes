@@ -21,6 +21,9 @@ public class PlayerController : MonoBehaviour
     private bool _isGrounded;
     private Vector3 _velocity;
 
+    private bool hasControl = false;
+    [SerializeField] private GameObject takeControlUIObject;
+
     void Start()
     {
         _characterController = GetComponent<CharacterController>();
@@ -30,8 +33,37 @@ public class PlayerController : MonoBehaviour
     {
         _isGrounded = Physics.CheckSphere(_groundCheckTransfrom.position, _groundDistance, _groundMask);
 
-        RotatePlayer();
-        MovePlayer();
+        if (Input.GetKeyDown(KeyCode.C))
+        {
+            hasControl = !hasControl;
+            takeControlUIObject.SetActive(!hasControl);
+
+            if (hasControl)
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+            } else
+            {
+                Cursor.lockState = CursorLockMode.None;
+            }
+
+            Cursor.visible = !hasControl;
+        }
+
+
+        // Only accept move input when in control of the player
+        if (hasControl)
+        {
+            RotatePlayer();
+            MovePlayer();
+        }
+
+        // Gravity
+        _velocity.y += Physics.gravity.y * Time.deltaTime;
+        if (_isGrounded && _velocity.y < 0)
+        {
+            _velocity.y = -2f;
+        }
+        _characterController.Move(_velocity * Time.deltaTime);
     }
 
     private void RotatePlayer()
@@ -55,12 +87,6 @@ public class PlayerController : MonoBehaviour
         float inputV = Input.GetAxisRaw("Vertical");
         float multipliedMoveSpeed = _moveSpeed * (Input.GetKey(KeyCode.LeftShift) ? _sprintSpeedMultiplier : 1.0f);
 
-        _velocity.y += Physics.gravity.y * Time.deltaTime;
-        if (_isGrounded && _velocity.y < 0)
-        {
-            _velocity.y = -2f;
-        }
-
         if (Input.GetButtonDown("Jump") && _isGrounded)
         {
             _velocity.y = Mathf.Sqrt(jumpHeight * -2f * Physics.gravity.y);
@@ -69,6 +95,5 @@ public class PlayerController : MonoBehaviour
         // Move player
         Vector3 movementVector = transform.right * inputH + transform.forward * inputV;
         _characterController.Move(movementVector * multipliedMoveSpeed * Time.deltaTime);
-        _characterController.Move(_velocity * Time.deltaTime);
     }
 }

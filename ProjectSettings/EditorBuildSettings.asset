@@ -4,5 +4,8 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/V2_MarchingCube/Scenes/V2_MainScene.unity
+    guid: 76d2ebcee6726db4887b4cc2c249de6d
   m_configObjects: {}
